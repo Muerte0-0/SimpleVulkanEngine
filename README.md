@@ -3,7 +3,7 @@ A Simple Vulkan Engine Following the [Khronos Vulkan Tutorial](https://docs.vulk
 Dependencies
 
 Need to Install
-- Vulkan SDK (make sure its path is added to the Environment)
+- [Vulkan SDK](https://vulkan.lunarg.com/sdk/home) (make sure its path is added to the Environment)
 
 Included
 - GLFW
