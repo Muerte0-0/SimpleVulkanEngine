@@ -1,0 +1,11 @@
+A Simple Vulkan Engine Following the [Khronos Vulkan Tutorial](https://docs.vulkan.org/tutorial/latest/00_Introduction.html)
+
+Dependencies
+
+Need to Install
+- Vulkan SDK (make sure its path is added to the Environment)
+
+Included
+- GLFW
+- stb Image
+- tinyobjloader
