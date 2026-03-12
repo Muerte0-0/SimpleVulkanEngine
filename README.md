@@ -1,6 +1,6 @@
 # Simple Vulkan Engine
 
-[![Build](https://github.com/Muerte0-0/SimpleVulkanEngine/actions/workflows/cmake-multi-platform.yml/badge.svg)](https://github.com/Muerte0-0/SimpleVulkanEngine/actions/workflows/cmake-multi-platform.yml)
+![Build Status](https://github.com/YOUR_USERNAME/YOUR_REPO/actions/workflows/build.yml/badge.svg)
 ![C++](https://img.shields.io/badge/C%2B%2B-20-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 
