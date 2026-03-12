@@ -19,6 +19,11 @@ if(ENABLE_CPP20_MODULE)
   set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 endif()
 
+project (SimpleVulkanEngine)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
 find_package (glfw3 REQUIRED)
 find_package (glm REQUIRED)
 find_package (Vulkan 1.4.335 REQUIRED)
@@ -28,11 +33,6 @@ set(tinyobjloader_INCLUDEDIR ${tinyobjloader_INCLUDE_DIRS})
 
 find_package(stb REQUIRED)
 set(STB_INCLUDEDIR ${stb_INCLUDE_DIRS})
-
-project (SimpleVulkanEngine)
-
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 function(add_shader_compile_target TARGET)
 
