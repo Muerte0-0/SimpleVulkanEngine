@@ -13,6 +13,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/CMake")
 
 # Add option to enable/disable C++ 20 module
 option(ENABLE_CPP20_MODULE "Enable C++ 20 module support for Vulkan" ON)
+option(COMPILE_SHADERS "Compile shaders during build" ON)
 
 # Enable C++ module dependency scanning only if C++ 20 module is enabled
 if(ENABLE_CPP20_MODULE)
@@ -47,6 +48,47 @@ function(add_shader_compile_target TARGET)
         VERBATIM
     )
 
+endfunction()
+
+function(add_shader_compile_target TARGET)
+    if(COMPILE_SHADERS)
+        set(SHADER_DIR ${CMAKE_SOURCE_DIR}/assets/shaders)
+        set(COMPILE_SCRIPT ${SHADER_DIR}/Compile.bat)
+        
+        # Check if any shader files have been modified
+        file(GLOB_RECURSE SHADER_FILES 
+            ${SHADER_DIR}/*.slang
+            ${SHADER_DIR}/*.vert
+            ${SHADER_DIR}/*.frag
+            ${SHADER_DIR}/*.comp
+            ${SHADER_DIR}/*.geom
+            ${SHADER_DIR}/*.tesc
+            ${SHADER_DIR}/*.tese
+            ${SHADER_DIR}/*.rgen
+            ${SHADER_DIR}/*.rmiss
+            ${SHADER_DIR}/*.rchit
+        )
+        
+        # Create timestamp file to track last compilation
+        set(TIMESTAMP_FILE ${CMAKE_CURRENT_BINARY_DIR}/shader_timestamp)
+        
+        add_custom_target(${TARGET}
+            COMMAND ${CMAKE_COMMAND} -E echo "Compiling shaders..."
+            COMMAND cmd /c ${COMPILE_SCRIPT}
+            COMMAND ${CMAKE_COMMAND} -E touch ${TIMESTAMP_FILE}
+            WORKING_DIRECTORY ${SHADER_DIR}
+            COMMENT "Running shader compile script"
+            BYPRODUCTS ${SHADER_FILES}  # Mark shaders as outputs
+            DEPENDS ${SHADER_FILES}     # Only run if shader files change
+            VERBATIM
+        )
+    else()
+        # Create dummy target when shader compilation is disabled
+        add_custom_target(${TARGET}
+            COMMAND ${CMAKE_COMMAND} -E echo "Shader compilation disabled"
+            COMMENT "Shader compilation is disabled"
+        )
+    endif()
 endfunction()
 
 file(GLOB_RECURSE SOURCES 
