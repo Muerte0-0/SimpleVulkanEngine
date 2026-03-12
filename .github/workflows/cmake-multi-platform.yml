@@ -53,6 +53,11 @@ jobs:
       with:
        version: 1.4.341.1
        cache: true
+
+    - name: Export Vulkan SDK
+      run: |
+       echo "VULKAN_SDK=${{ github.workspace }}/VULKAN_SDK" >> $GITHUB_ENV
+       echo "${{ github.workspace }}/VULKAN_SDK/bin" >> $GITHUB_PATH
      
     - name: Set reusable strings
       # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
