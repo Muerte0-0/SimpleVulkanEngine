@@ -65,6 +65,19 @@ jobs:
           echo "${HOME}/VulkanSDK/1.4.341.1/x86_64/bin" >> $GITHUB_PATH
         fi
 
+    - name: Install Slang compiler (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        # Download and install Slang
+        curl -L -o slang.zip https://github.com/shader-slang/slang/releases/download/v2024.1.5/slang-2024.1.5-windows-x86_64.zip
+        unzip slang.zip -d ${{ runner.temp }}/slang
+        echo "${{ runner.temp }}/slang/bin" >> $GITHUB_PATH
+    
+        # Also copy to Vulkan SDK directory for compatibility
+        mkdir -p "C:/VulkanSDK/1.4.341.1/Bin"
+        cp "${{ runner.temp }}/slang/bin/slangc.exe" "C:/VulkanSDK/1.4.341.1/Bin/"
+
     - name: Set reusable strings
       # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
       id: strings
