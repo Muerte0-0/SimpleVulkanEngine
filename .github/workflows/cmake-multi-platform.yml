@@ -71,7 +71,7 @@ jobs:
       run: |
         # Download and install Slang
         curl -L -o slang.zip https://github.com/shader-slang/slang/releases/tag/v2026.4.2/slang-2026.4.2-windows-x86_64.zip
-        unzip slang.zip -d ${{ runner.temp }}/slang
+        unzip slang-2026.4.2-windows-x86_64.zip -d ${{ runner.temp }}/slang
         echo "${{ runner.temp }}/slang/bin" >> $GITHUB_PATH
     
         # Also copy to Vulkan SDK directory for compatibility
