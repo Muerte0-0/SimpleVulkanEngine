@@ -1,6 +1,6 @@
 # Simple Vulkan Engine
 
-![Build Status](https://github.com/YOUR_USERNAME/YOUR_REPO/actions/workflows/build.yml/badge.svg)
+[![Build](https://github.com/Muerte0-0/SimpleVulkanEngine/actions/workflows/Build.yml/badge.svg)](https://github.com/Muerte0-0/SimpleVulkanEngine/actions/workflows/Build.yml)
 ![C++](https://img.shields.io/badge/C%2B%2B-20-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 
