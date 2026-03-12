@@ -5,7 +5,7 @@ on:
     branches: [ main, master, develop ]
   pull_request:
     branches: [ main, master, develop ]
-  workflow_dispatch: # Allow manual triggering
+  workflow_dispatch:
 
 jobs:
   build-windows:
@@ -23,23 +23,58 @@ jobs:
     - name: Install Vulkan SDK
       uses: humbletim/install-vulkan-sdk@v1.2
       with:
-       version: 1.4.341.1
-       cache: true
+        version: 1.4.341.1
+        cache: true
 
-    - name: Set Vulkan SDK environment variables
-      shell: bash
+    - name: Set Vulkan SDK environment variables (Windows)
+      shell: pwsh
       run: |
-        if [ "$RUNNER_OS" == "Windows" ]; then
-          echo "VULKAN_SDK=C:/VulkanSDK/1.4.341.1" >> $GITHUB_ENV
-          echo "C:/VulkanSDK/1.4.341.1/bin" >> $GITHUB_PATH
-        else
-          echo "VULKAN_SDK=${HOME}/VulkanSDK/1.4.341.1/x86_64" >> $GITHUB_ENV
-          echo "${HOME}/VulkanSDK/1.4.341.1/x86_64/bin" >> $GITHUB_PATH
-        fi
+        $VulkanVersion = "1.4.341.1"
+        $VulkanPath = "C:\VulkanSDK\$VulkanVersion"
+        
+        # Set environment variables
+        echo "VULKAN_SDK=$VulkanPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        echo "$VulkanPath\Bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        
+        # Also set for current session
+        $env:VULKAN_SDK = $VulkanPath
+        $env:PATH += ";$VulkanPath\Bin"
+        
+        # Create CMake toolchain file to help find Vulkan
+        $CMakeConfig = @"
+set(Vulkan_INCLUDE_DIR "$VulkanPath/Include")
+set(Vulkan_LIBRARY "$VulkanPath/Lib/vulkan-1.lib")
+set(Vulkan_ROOT "$VulkanPath")
+"@
+        $CMakeConfig | Out-File -FilePath "${{ github.workspace }}/vulkan-config.cmake" -Encoding utf8
+        
+        Write-Host "VULKAN_SDK set to: $env:VULKAN_SDK"
+        Write-Host "PATH includes: $env:PATH"
+        
+        # Verify Vulkan files exist
+        Write-Host "Checking Vulkan files:"
+        if (Test-Path "$VulkanPath\Include\vulkan\vulkan.h") {
+          Write-Host "✓ vulkan.h found"
+        } else {
+          Write-Host "✗ vulkan.h not found"
+        }
+        if (Test-Path "$VulkanPath\Lib\vulkan-1.lib") {
+          Write-Host "✓ vulkan-1.lib found"
+        } else {
+          Write-Host "✗ vulkan-1.lib not found"
+        }
     
-    - name: Configure CMake
+    - name: Configure CMake (Windows)
+      shell: pwsh
       run: |
-        cmake -B build -G "Visual Studio 17 2022" -A x64
+        $VulkanVersion = "1.4.341.1"
+        $VulkanPath = "C:\VulkanSDK\$VulkanVersion"
+        
+        # Configure with explicit Vulkan paths
+        cmake -B build -G "Visual Studio 17 2022" -A x64 `
+          -DVulkan_INCLUDE_DIR="$VulkanPath/Include" `
+          -DVulkan_LIBRARY="$VulkanPath/Lib/vulkan-1.lib" `
+          -DCMAKE_PREFIX_PATH="$VulkanPath"
     
     - name: Build
       run: |
@@ -64,13 +99,24 @@ jobs:
       with:
         submodules: recursive
     
-    - name: Install dependencies
+    - name: Install Vulkan SDK (Linux)
       run: |
+        # Add LunarG repository for Vulkan SDK
+        wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
+        sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-noble.list https://packages.lunarg.com/vulkan/lunarg-vulkan-noble.list
         sudo apt-get update
+        
+        # Install Vulkan SDK and dependencies
         sudo apt-get install -y \
           build-essential \
           cmake \
           ninja-build \
+          vulkan-sdk \
+          libvulkan-dev \
+          vulkan-validationlayers \
+          vulkan-tools \
+          libglfw3-dev \
+          libglm-dev \
           libxrandr-dev \
           libxinerama-dev \
           libxcursor-dev \
@@ -80,20 +126,21 @@ jobs:
           libxkbcommon-dev \
           wayland-protocols \
           mesa-utils \
-          libgl1-mesa-dev \
-          libvulkan-dev \
-          vulkan-validationlayers \
-          vulkan-tools
+          libgl1-mesa-dev
         
-        # Download and install Vulkan SDK (optional, as libvulkan-dev provides the basics)
-        wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
-        sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
-        sudo apt-get update
-        sudo apt-get install -y vulkan-sdk
+        # Set environment variables
+        echo "VULKAN_SDK=/usr" >> $GITHUB_ENV
+        
+        # Verify installation
+        vulkaninfo --summary
+        which vulkaninfo
     
-    - name: Configure CMake
+    - name: Configure CMake (Linux)
       run: |
-        cmake -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+        cmake -B build -G "Ninja" \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DVulkan_INCLUDE_DIR=/usr/include \
+          -DVulkan_LIBRARY=/usr/lib/x86_64-linux-gnu/libvulkan.so
     
     - name: Build
       run: |
@@ -110,11 +157,9 @@ jobs:
         fi
       continue-on-error: true
 
-  build-linux-nvidia-docker:
+  # Simpler Linux build without NVIDIA Docker (since it was causing issues)
+  build-linux-simple:
     runs-on: ubuntu-latest
-    container:
-      image: nvidia/vulkan:1.3.275.0
-      options: --cap-add=SYS_PTRACE --security-opt seccomp=unconfined
     
     steps:
     - name: Checkout repository
@@ -122,13 +167,16 @@ jobs:
       with:
         submodules: recursive
     
-    - name: Install additional dependencies
+    - name: Install dependencies
       run: |
-        apt-get update
-        apt-get install -y \
+        sudo apt-get update
+        sudo apt-get install -y \
           cmake \
           ninja-build \
+          libvulkan-dev \
+          vulkan-validationlayers \
           libglfw3-dev \
+          libglm-dev \
           libxrandr-dev \
           libxinerama-dev \
           libxcursor-dev \
@@ -137,15 +185,14 @@ jobs:
     
     - name: Configure CMake
       run: |
-        cmake -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+        cmake -B build -G "Ninja" \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DVulkan_INCLUDE_DIR=/usr/include \
+          -DVulkan_LIBRARY=/usr/lib/x86_64-linux-gnu/libvulkan.so
     
     - name: Build
       run: |
         cmake --build build --config Release --parallel
-    
-    - name: Check Vulkan info
-      run: |
-        vulkaninfo --summary
 
   lint-and-format:
     runs-on: ubuntu-latest
@@ -157,7 +204,7 @@ jobs:
     - name: Install clang-format
       run: |
         sudo apt-get update
-        sudo apt-get install -y clang-format
+        sudo apt-get install -y clang-format cppcheck
     
     - name: Check code formatting
       run: |
@@ -166,42 +213,16 @@ jobs:
     
     - name: Run cppcheck (static analysis)
       run: |
-        sudo apt-get install -y cppcheck
-        cppcheck --enable=all --suppress=missingIncludeSystem --error-exitcode=1 ./src
+        cppcheck --enable=all --suppress=missingIncludeSystem --error-exitcode=1 --inline-suppr \
+          --suppress=unmatchedSuppression:./src/* \
+          ./src 2> cppcheck-errors.txt || true
+        if [ -s cppcheck-errors.txt ]; then
+          cat cppcheck-errors.txt
+          exit 1
+        fi
 
-  dependency-cache:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-    
-    - name: Cache dependencies
-      uses: actions/cache@v3
-      id: cache-deps
-      with:
-        path: |
-          ~/.cache/vulkan-sdk
-          ~/.cache/glfw
-          ~/.cache/tinyobjloader
-        key: ${{ runner.os }}-deps-${{ hashFiles('**/CMakeLists.txt') }}
-    
-    - name: Download dependencies (if cache miss)
-      if: steps.cache-deps.outputs.cache-hit != 'true'
-      run: |
-        mkdir -p ~/.cache/vulkan-sdk
-        mkdir -p ~/.cache/glfw
-        mkdir -p ~/.cache/tinyobjloader
-        
-        # Download GLFW source
-        wget -qO- https://github.com/glfw/glfw/archive/refs/tags/3.3.9.tar.gz | tar xz -C ~/.cache/glfw
-        
-        # Download tinyobjloader
-        wget -qO- https://github.com/tinyobjloader/tinyobjloader/archive/refs/tags/v2.0-rc1.tar.gz | tar xz -C ~/.cache/tinyobjloader
-
-  # Optional: Create a combined badge status
   build-status:
-    needs: [build-windows, build-linux, build-linux-nvidia-docker, lint-and-format]
+    needs: [build-windows, build-linux, build-linux-simple, lint-and-format]
     runs-on: ubuntu-latest
     if: always()
     
@@ -210,12 +231,12 @@ jobs:
       run: |
         echo "Windows Build: ${{ needs.build-windows.result }}"
         echo "Linux Build: ${{ needs.build-linux.result }}"
-        echo "Linux NVIDIA Docker: ${{ needs.build-linux-nvidia-docker.result }}"
+        echo "Linux Simple Build: ${{ needs.build-linux-simple.result }}"
         echo "Lint & Format: ${{ needs.lint-and-format.result }}"
         
         if [ "${{ needs.build-windows.result }}" = "success" ] && \
            [ "${{ needs.build-linux.result }}" = "success" ] && \
-           [ "${{ needs.build-linux-nvidia-docker.result }}" = "success" ] && \
+           [ "${{ needs.build-linux-simple.result }}" = "success" ] && \
            [ "${{ needs.lint-and-format.result }}" = "success" ]; then
           echo "All builds passed!"
           exit 0
