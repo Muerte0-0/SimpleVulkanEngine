@@ -58,7 +58,7 @@ jobs:
     - name: Set Vulkan SDK environment variables
       shell: bash
       run: |
-        VulkanVersion = "1.4.341.1"
+        $VulkanVersion = "1.4.341.1"
         $VulkanPath = "C:\VulkanSDK\$VulkanVersion"
         $VulkanBinPath = "$VulkanPath\Bin"
         
