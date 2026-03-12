@@ -54,11 +54,17 @@ jobs:
        version: 1.4.341.1
        cache: true
 
-    - name: Export Vulkan SDK
+    - name: Set Vulkan SDK environment variables
+      shell: bash
       run: |
-       echo "VULKAN_SDK=${{ github.workspace }}/VULKAN_SDK" >> $GITHUB_ENV
-       echo "${{ github.workspace }}/VULKAN_SDK/bin" >> $GITHUB_PATH
-     
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          echo "VULKAN_SDK=C:/VulkanSDK/1.4.341.1" >> $GITHUB_ENV
+          echo "C:/VulkanSDK/1.4.341.1/bin" >> $GITHUB_PATH
+        else
+          echo "VULKAN_SDK=${HOME}/VulkanSDK/1.4.341.1/x86_64" >> $GITHUB_ENV
+          echo "${HOME}/VulkanSDK/1.4.341.1/x86_64/bin" >> $GITHUB_PATH
+        fi
+
     - name: Set reusable strings
       # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
       id: strings
@@ -74,6 +80,8 @@ jobs:
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        -DVulkan_INCLUDE_DIR=${{ env.VULKAN_SDK }}/include
+        -DVulkan_LIBRARY=${{ env.VULKAN_SDK }}/lib
         -S ${{ github.workspace }}
 
     - name: Build
