@@ -65,6 +65,19 @@ jobs:
           echo "${HOME}/VulkanSDK/1.4.341.1/x86_64/bin" >> $GITHUB_PATH
         fi
 
+        # Verify slangc exists
+        Write-Host "Checking for slangc.exe..."
+        if (Test-Path "$VulkanBinPath\slangc.exe") {
+          Write-Host "✓ slangc.exe found at $VulkanBinPath\slangc.exe"
+          # Test run slangc
+          & "$VulkanBinPath\slangc.exe" --version
+        } else {
+          Write-Host "✗ slangc.exe not found at $VulkanBinPath\slangc.exe"
+          # List contents of Bin directory
+          Write-Host "Contents of $VulkanBinPath:"
+          Get-ChildItem "$VulkanBinPath" | Select-Object Name
+        }
+
     - name: Set reusable strings
       # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
       id: strings
