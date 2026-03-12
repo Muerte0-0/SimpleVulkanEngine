@@ -25,7 +25,7 @@ jobs:
       run: |
         # Download Vulkan SDK installer
         $vulkanVersion = "1.4.341.1"
-        $installerUrl = "https://sdk.lunarg.com/sdk/download/$vulkanVersion/windows/VulkanSDK-$vulkanVersion-Installer.exe"
+        $installerUrl = "https://sdk.lunarg.com/sdk/download/$vulkanVersion/windows/vulkansdk-windows-X64-$vulkanVersion.exe"
         $installerPath = "$env:TEMP\VulkanSDK-Installer.exe"
         
         Write-Host "Downloading Vulkan SDK..."
