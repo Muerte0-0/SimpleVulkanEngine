@@ -1,4 +1,4 @@
-![Build](https://github.com/Muerte0-0/SimpleVulkanEngine/actions/workflows/build.yml/badge.svg)
+![Build](https://github.com/Muerte0-0/SimpleVulkanEngine/.github/workflows/cmake-multi-platform.yml/badge.svg)
 
 A Simple Vulkan Engine Following the [Khronos Vulkan Tutorial](https://docs.vulkan.org/tutorial/latest/00_Introduction.html)
 
