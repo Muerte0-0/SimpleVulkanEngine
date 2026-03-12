@@ -73,6 +73,7 @@ jobs:
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         -DVulkan_INCLUDE_DIR=${{ env.VULKAN_SDK }}/include
         -DVulkan_LIBRARY=${{ env.VULKAN_SDK }}/lib
+        -DCOMPILE_SHADERS=OFF
         -S ${{ github.workspace }}
 
     - name: Build
