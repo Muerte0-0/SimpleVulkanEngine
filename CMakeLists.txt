@@ -26,7 +26,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 find_package (glfw3 REQUIRED)
 find_package (glm REQUIRED)
-find_package (Vulkan 1.4.335 REQUIRED)
+find_package (Vulkan REQUIRED)
 find_package (tinyobjloader REQUIRED)
 
 set(tinyobjloader_INCLUDEDIR ${tinyobjloader_INCLUDE_DIRS})
