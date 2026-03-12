@@ -52,18 +52,23 @@ jobs:
       uses: humbletim/install-vulkan-sdk@v1.2
       with:
        version: 1.4.341.1
+       vulkan-use-cache: true
        cache: true
 
     - name: Set Vulkan SDK environment variables
       shell: bash
       run: |
-        if [ "$RUNNER_OS" == "Windows" ]; then
-          echo "VULKAN_SDK=C:/VulkanSDK/1.4.341.1" >> $GITHUB_ENV
-          echo "C:/VulkanSDK/1.4.341.1/bin" >> $GITHUB_PATH
-        else
-          echo "VULKAN_SDK=${HOME}/VulkanSDK/1.4.341.1/x86_64" >> $GITHUB_ENV
-          echo "${HOME}/VulkanSDK/1.4.341.1/x86_64/bin" >> $GITHUB_PATH
-        fi
+        VulkanVersion = "1.4.341.1"
+        $VulkanPath = "C:\VulkanSDK\$VulkanVersion"
+        $VulkanBinPath = "$VulkanPath\Bin"
+        
+        # Set environment variables
+        echo "VULKAN_SDK=$VulkanPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        echo "$VulkanBinPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        
+        # Also set for current session
+        $env:VULKAN_SDK = $VulkanPath
+        $env:PATH = "$VulkanBinPath;$env:PATH"
 
         # Verify slangc exists
         Write-Host "Checking for slangc.exe..."
