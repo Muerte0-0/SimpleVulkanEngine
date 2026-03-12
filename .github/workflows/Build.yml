@@ -20,26 +20,22 @@ jobs:
     - name: Setup MSVC
       uses: ilammy/msvc-dev-cmd@v1
     
-    - name: Download and install Vulkan SDK
-      shell: pwsh
+    - name: Install Vulkan SDK
+      uses: humbletim/install-vulkan-sdk@v1.2
+      with:
+       version: 1.4.341.1
+       cache: true
+
+    - name: Set Vulkan SDK environment variables
+      shell: bash
       run: |
-        # Download Vulkan SDK installer
-        $vulkanVersion = "1.4.341.1"
-        $installerUrl = "https://sdk.lunarg.com/sdk/download/$vulkanVersion/windows/vulkansdk-windows-X64-$vulkanVersion.exe"
-        $installerPath = "$env:TEMP\VulkanSDK-Installer.exe"
-        
-        Write-Host "Downloading Vulkan SDK..."
-        Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
-        
-        Write-Host "Installing Vulkan SDK silently..."
-        Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait
-        
-        # Add Vulkan SDK to PATH
-        $vulkanPath = "C:\VulkanSDK\$vulkanVersion"
-        echo "$vulkanPath\Bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-        
-        # Set VULKAN_SDK environment variable
-        echo "VULKAN_SDK=$vulkanPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          echo "VULKAN_SDK=C:/VulkanSDK/1.4.341.1" >> $GITHUB_ENV
+          echo "C:/VulkanSDK/1.4.341.1/bin" >> $GITHUB_PATH
+        else
+          echo "VULKAN_SDK=${HOME}/VulkanSDK/1.4.341.1/x86_64" >> $GITHUB_ENV
+          echo "${HOME}/VulkanSDK/1.4.341.1/x86_64/bin" >> $GITHUB_PATH
+        fi
     
     - name: Configure CMake
       run: |
