@@ -29,6 +29,8 @@ find_package (glfw3 REQUIRED)
 find_package (glm REQUIRED)
 find_package (Vulkan REQUIRED)
 find_package (tinyobjloader REQUIRED)
+find_package (tinygltf REQUIRED)
+find_package (KTX REQUIRED)
 
 set(tinyobjloader_INCLUDEDIR ${tinyobjloader_INCLUDE_DIRS})
 
@@ -76,6 +78,7 @@ ${PROJECT_SOURCE_DIR}/src/*.cpp
 Vulkan::cppm
 glm::glm
 tinyobjloader::tinyobjloader
+KTX::ktx
 )
 
 add_executable (${PROJECT_NAME} ${SOURCES})
@@ -90,11 +93,14 @@ ${GLFW3_INCLUDE_DIR}
 ${glm_INCLUDE_DIR}
 ${STB_INCLUDEDIR}
 ${tinyobjloader_INCLUDEDIR}
+${tinygltf_INCLUDE_DIR}
+${KTX_INCLUDE_DIRS}
 )
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
 ${VULKAN_LIBRARIES}
 ${GLFW3_LIBRARY}
+${KTX_LIBRARIES}
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE 

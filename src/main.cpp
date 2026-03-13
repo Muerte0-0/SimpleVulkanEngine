@@ -8,6 +8,7 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 
@@ -17,7 +18,6 @@
 import vulkan_hpp;
 #endif
 
-//#define VK_USE_PLATFORM_WIN32_KHR
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -28,17 +28,18 @@ import vulkan_hpp;
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/hash.hpp>
 
+#define TINYGLTF_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <tiny_gltf.h>
 
-#define TINYOBJLOADER_IMPLEMENTATION
-#include <tiny_obj_loader.h>
+#include <ktx.h>
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
-const std::string MODEL_PATH = "../../../assets/models/viking_room.obj";
-const std::string TEXTURE_PATH = "../../../assets/textures/viking_room.png";
+const std::string MODEL_PATH = "../../../assets/models/viking_room.glb";
+const std::string TEXTURE_PATH = "../../../assets/textures/viking_room.ktx2";
 
 constexpr int MAX_FRAMES_IN_FLIGHT = 3;
 
@@ -140,11 +141,12 @@ private:
 	vk::raii::DeviceMemory depthImageMemory = nullptr;
 	vk::raii::ImageView depthImageView = nullptr;
 
-	uint32_t texMipLevels = 0;
+	uint32_t texMipLevels = 1;
 	vk::raii::Image textureImage = nullptr;
 	vk::raii::DeviceMemory textureImageMemory = nullptr;
 	vk::raii::ImageView textureImageView = nullptr;
 	vk::raii::Sampler textureSampler = nullptr;
+	vk::Format textureImageFormat = vk::Format::eUndefined;
 
 	std::vector<Vertex> vertices;
 	std::vector<uint32_t> indices;
@@ -240,6 +242,15 @@ private:
 	{
 		swapChainImageViews.clear();
 		swapChain = nullptr;
+
+		presentCompleteSemaphores.clear();
+		for (auto& imageView : swapChainImageViews)
+		{
+			imageView = nullptr;
+		}
+
+		swapChainImageViews.clear();
+		swapChain = nullptr;
 	}
 
 	void Cleanup()
@@ -267,6 +278,13 @@ private:
 		CreateImageViews();
 		CreateColorResources();
 		CreateDepthResources();
+
+		presentCompleteSemaphores.reserve(swapChainImages.size());
+		vk::SemaphoreCreateInfo semaphoreInfo{};
+		for (size_t i = 0; i < swapChainImages.size(); ++i)
+		{
+			presentCompleteSemaphores.push_back(device.createSemaphore(semaphoreInfo));
+		}
 	}
 
 	// Vulkan Initialization
@@ -353,7 +371,14 @@ private:
 		debugUtilsMessengerCreateInfoEXT.messageType = messageTypeFlags;
 		debugUtilsMessengerCreateInfoEXT.pfnUserCallback = &DebugCallback;
 
-		debugMessenger = instance.createDebugUtilsMessengerEXT(debugUtilsMessengerCreateInfoEXT);
+		try
+		{
+			debugMessenger = instance.createDebugUtilsMessengerEXT(debugUtilsMessengerCreateInfoEXT);
+		}
+		catch (vk::SystemError& err)
+		{
+			std::cout << "Debug messenger not available. Validation layers may not be enabled." << std::endl;
+		}
 	}
 
 	void CreateSurface()
@@ -389,8 +414,7 @@ private:
 		auto availableDeviceExtensions = physicalDevice.enumerateDeviceExtensionProperties();
 		bool supportsAllRequiredExtensions =
 			std::ranges::all_of(requiredDeviceExtension,
-				[&availableDeviceExtensions](auto const& requiredDeviceExtension)
-				{
+				[&availableDeviceExtensions](auto const& requiredDeviceExtension) {
 					return std::ranges::any_of(availableDeviceExtensions,
 						[requiredDeviceExtension](auto const& availableDeviceExtension)
 						{ return strcmp(availableDeviceExtension.extensionName, requiredDeviceExtension) == 0; });
@@ -398,7 +422,7 @@ private:
 
 		// Check if the physicalDevice supports the required features (dynamic rendering and extended dynamic state)
 		auto features = physicalDevice.template getFeatures2<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan11Features, vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
-		bool supportsRequiredFeatures = features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering 
+		bool supportsRequiredFeatures = features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering
 			&& features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState
 			&& features.template get<vk::PhysicalDeviceFeatures2>().features.samplerAnisotropy;
 
@@ -743,35 +767,62 @@ private:
 
 	void CreateTextureImage()
 	{
-		int texWidth, texHeight, texChannels;
-		stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-		vk::DeviceSize imageSize = texWidth * texHeight * 4;
-		texMipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+		ktxTexture* kTexture;
+		KTX_error_code result = ktxTexture_CreateFromNamedFile(
+			TEXTURE_PATH.c_str(),
+			KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT,
+			&kTexture);
 
-		if (!pixels)
-			throw std::runtime_error("failed to load texture image!");
+		if (result != KTX_SUCCESS)
+			throw std::runtime_error("failed to load ktx texture image!");
+
+		// Get texture dimensions and data
+		uint32_t texWidth = kTexture->baseWidth;
+		uint32_t texHeight = kTexture->baseHeight;
+		ktx_size_t imageSize = ktxTexture_GetImageSize(kTexture, 0);
+		ktx_uint8_t* ktxTextureData = ktxTexture_GetData(kTexture);
 
 		vk::raii::Buffer stagingBuffer({});
 		vk::raii::DeviceMemory stagingBufferMemory({});
 		CreateBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
 
 		void* data = stagingBufferMemory.mapMemory(0, imageSize);
-		memcpy(data, pixels, imageSize);
+		memcpy(data, ktxTextureData, imageSize);
 		stagingBufferMemory.unmapMemory();
 
-		stbi_image_free(pixels);
+		// Determine the Vulkan format from KTX format
+		vk::Format textureFormat;
 
-		CreateImage(texWidth, texHeight, texMipLevels, vk::SampleCountFlagBits::e1,
-			vk::Format::eR8G8B8A8Srgb,
-			vk::ImageTiling::eOptimal,
-			vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-			vk::MemoryPropertyFlagBits::eDeviceLocal,
-			textureImage, textureImageMemory);
+		// Check if the KTX texture has a format
+		if (kTexture->classId == ktxTexture2_c)
+		{
+			// For KTX2 files, we can get the format directly
+			auto* ktx2 = reinterpret_cast<ktxTexture2*>(kTexture);
+			textureFormat = static_cast<vk::Format>(ktx2->vkFormat);
+
+			if (textureFormat == vk::Format::eUndefined)
+			{
+				// If the format is undefined, fall back to a reasonable default
+				textureFormat = vk::Format::eR8G8B8A8Unorm;
+			}
+		}
+		else
+		{
+			// For KTX1 files or if we can't determine the format, use a reasonable default
+			textureFormat = vk::Format::eR8G8B8A8Unorm;
+		}
+
+		textureImageFormat = textureFormat;
+
+		CreateImage(texWidth, texHeight, texMipLevels, vk::SampleCountFlagBits::e1, textureFormat, vk::ImageTiling::eOptimal,
+			vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+			vk::MemoryPropertyFlagBits::eDeviceLocal, textureImage, textureImageMemory);
 
 		TransitionImageLayout(textureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, texMipLevels);
-		CopyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+		CopyBufferToImage(stagingBuffer, textureImage, texWidth, texHeight);
+		TransitionImageLayout(textureImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, texMipLevels);
 
-		GenerateMipmaps(textureImage, vk::Format::eR8G8B8A8Srgb, texWidth, texHeight, texMipLevels);
+		ktxTexture_Destroy(kTexture);
 	}
 
 	void GenerateMipmaps(vk::raii::Image& image, vk::Format imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels)
@@ -850,7 +901,7 @@ private:
 
 	void CreateTextureImageView()
 	{
-		textureImageView = CreateImageView(textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor, texMipLevels);
+		textureImageView = CreateImageView(textureImage, textureImageFormat, vk::ImageAspectFlagBits::eColor, texMipLevels);
 	}
 
 	void CreateTextureSampler()
@@ -959,40 +1010,188 @@ private:
 
 	void LoadModel()
 	{
-		tinyobj::attrib_t attrib;
-		std::vector<tinyobj::shape_t> shapes;
-		std::vector<tinyobj::material_t> materials;
+		tinygltf::Model model;
+		tinygltf::TinyGLTF loader;
 		std::string err;
-		
-		if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &err, MODEL_PATH.c_str()))
-			throw std::runtime_error(err);
+		std::string warn;
 
+		bool ret;
+
+		if (MODEL_PATH.ends_with(".glb"))
+			ret = loader.LoadBinaryFromFile(&model, &err, &warn, MODEL_PATH);
+		else
+			ret = loader.LoadASCIIFromFile(&model, &err, &warn, MODEL_PATH);
+
+		if (!warn.empty())
+			std::cout << "glTF warning: " << warn << std::endl;
+
+		if (!err.empty())
+			std::cout << "glTF error: " << err << std::endl;
+
+		if (!ret)
+			throw std::runtime_error("Failed to load glTF model");
+
+		// Clear any existing data
+		vertices.clear();
+		indices.clear();
+
+		// Process all meshes in the model
 		std::unordered_map<Vertex, uint32_t> uniqueVertices{};
 
-		for (const auto& shape : shapes)
+		for (const auto& mesh : model.meshes)
 		{
-			for (const auto& index : shape.mesh.indices)
+			for (const auto& primitive : mesh.primitives)
 			{
-				Vertex vertex{};
+				// POSITION accessor (required)
+				if (primitive.attributes.find("POSITION") == primitive.attributes.end())
+					throw std::runtime_error("Primitive has no POSITION attribute");
 
-				vertex.pos = {
-					attrib.vertices[3 * index.vertex_index + 0],
-					attrib.vertices[3 * index.vertex_index + 1],
-					attrib.vertices[3 * index.vertex_index + 2] };
+				const tinygltf::Accessor& posAccessor = model.accessors[primitive.attributes.at("POSITION")];
+				if (posAccessor.bufferView < 0)
+					throw std::runtime_error("POSITION accessor has no bufferView");
 
-				vertex.texCoord = {
-					attrib.texcoords[2 * index.texcoord_index + 0],
-					1.0f - attrib.texcoords[2 * index.texcoord_index + 1] };
+				const tinygltf::BufferView& posBufferView = model.bufferViews[posAccessor.bufferView];
+				const tinygltf::Buffer& posBuffer = model.buffers[posBufferView.buffer];
 
-				vertex.color = { 1.0f, 1.0f, 1.0f };
+				if (posAccessor.type != TINYGLTF_TYPE_VEC3 || posAccessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
+					throw std::runtime_error("POSITION accessor must be VEC3 of FLOAT");
 
-				if (!uniqueVertices.contains(vertex))
+				// TEXCOORD_0 accessor (optional)
+				bool hasTexCoords = primitive.attributes.find("TEXCOORD_0") != primitive.attributes.end();
+				const tinygltf::Accessor* texAccessor = nullptr;
+				const tinygltf::BufferView* texBufferView = nullptr;
+				const tinygltf::Buffer* texBuffer = nullptr;
+
+				if (hasTexCoords)
 				{
-					uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
-					vertices.push_back(vertex);
+					texAccessor = &model.accessors[primitive.attributes.at("TEXCOORD_0")];
+					if (texAccessor->bufferView < 0)
+						hasTexCoords = false;
+					else
+					{
+						texBufferView = &model.bufferViews[texAccessor->bufferView];
+						texBuffer = &model.buffers[texBufferView->buffer];
+
+						if (texAccessor->type != TINYGLTF_TYPE_VEC2 || texAccessor->componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
+							throw std::runtime_error("TEXCOORD_0 accessor must be VEC2 of FLOAT");
+					}
 				}
 
-				indices.push_back(uniqueVertices[vertex]);
+				// Prepare pointers and strides (use bufferView.byteStride if present, otherwise tightly packed)
+				const uint8_t* posBase = posBuffer.data.data() + posBufferView.byteOffset + posAccessor.byteOffset;
+				const size_t posStride = posBufferView.byteStride && posBufferView.byteStride != 0 ? static_cast<size_t>(posBufferView.byteStride) : sizeof(float) * 3;
+
+				const uint8_t* texBase = nullptr;
+				size_t texStride = 0;
+				if (hasTexCoords)
+				{
+					texBase = texBuffer->data.data() + texBufferView->byteOffset + texAccessor->byteOffset;
+					texStride = texBufferView->byteStride && texBufferView->byteStride != 0 ? static_cast<size_t>(texBufferView->byteStride) : sizeof(float) * 2;
+				}
+
+				// Remap from source vertex index (in accessor) to the unique vertex index we create
+				std::vector<uint32_t> srcToUnique;
+				srcToUnique.resize(posAccessor.count);
+
+				// Process vertices for this primitive
+				for (size_t i = 0; i < posAccessor.count; ++i)
+				{
+					Vertex vertex{};
+
+					// Read position (safe memcpy to avoid alignment issues)
+					float posVals[3] = { 0.0f, 0.0f, 0.0f };
+					std::memcpy(posVals, posBase + i * posStride, sizeof(posVals));
+					vertex.pos = { posVals[0], posVals[1], posVals[2] };
+
+					// Read texcoord if available
+					if (hasTexCoords)
+					{
+						float texVals[2] = { 0.0f, 0.0f };
+						std::memcpy(texVals, texBase + i * texStride, sizeof(texVals));
+						vertex.texCoord = { texVals[0], 1.0f - texVals[1] }; // flip V
+					}
+					else
+					{
+						vertex.texCoord = { 0.0f, 0.0f };
+					}
+
+					// default color
+					vertex.color = { 1.0f, 1.0f, 1.0f };
+
+					// Get or create unique index for this vertex
+					auto it = uniqueVertices.find(vertex);
+					if (it == uniqueVertices.end())
+					{
+						uint32_t newIndex = static_cast<uint32_t>(vertices.size());
+						uniqueVertices.emplace(vertex, newIndex);
+						vertices.push_back(vertex);
+						srcToUnique[i] = newIndex;
+					}
+					else
+					{
+						srcToUnique[i] = it->second;
+					}
+				}
+
+				// Process indices (if present) or use sequential indices for non-indexed primitive
+				if (primitive.indices >= 0)
+				{
+					const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
+					if (indexAccessor.bufferView < 0)
+						throw std::runtime_error("Index accessor has no bufferView");
+
+					const tinygltf::BufferView& indexBufferView = model.bufferViews[indexAccessor.bufferView];
+					const tinygltf::Buffer& indexBuffer = model.buffers[indexBufferView.buffer];
+
+					const uint8_t* indexBase = indexBuffer.data.data() + indexBufferView.byteOffset + indexAccessor.byteOffset;
+
+					// handle index component types
+					if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
+					{
+						const uint16_t* data = reinterpret_cast<const uint16_t*>(indexBase);
+						for (size_t i = 0; i < indexAccessor.count; ++i)
+						{
+							uint32_t srcIdx = static_cast<uint32_t>(data[i]);
+							if (srcIdx >= srcToUnique.size())
+								throw std::runtime_error("Index out of range in primitive (USHORT)");
+							indices.push_back(srcToUnique[srcIdx]);
+						}
+					}
+					else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
+					{
+						const uint32_t* data = reinterpret_cast<const uint32_t*>(indexBase);
+						for (size_t i = 0; i < indexAccessor.count; ++i)
+						{
+							uint32_t srcIdx = data[i];
+							if (srcIdx >= srcToUnique.size())
+								throw std::runtime_error("Index out of range in primitive (UINT)");
+							indices.push_back(srcToUnique[srcIdx]);
+						}
+					}
+					else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
+					{
+						const uint8_t* data = indexBase;
+						for (size_t i = 0; i < indexAccessor.count; ++i)
+						{
+							uint32_t srcIdx = data[i];
+							if (srcIdx >= srcToUnique.size())
+								throw std::runtime_error("Index out of range in primitive (UBYTE)");
+							indices.push_back(srcToUnique[srcIdx]);
+						}
+					}
+					else
+					{
+						throw std::runtime_error("Unsupported index component type");
+					}
+				}
+				else
+				{
+					// non-indexed primitive: use the vertex order (triangles assumed by topology)
+					for (size_t i = 0; i < srcToUnique.size(); ++i)
+					{
+						indices.push_back(srcToUnique[i]);
+					}
+				}
 			}
 		}
 	}
@@ -1425,7 +1624,7 @@ private:
 		std::cerr << "validation layer: type " << to_string(type) << " msg: " << pCallbackData->pMessage << std::endl;
 
 		return vk::False;
-	}
+	 }
 
 	static std::vector<char> ReadFile(const std::string& filename)
 	{

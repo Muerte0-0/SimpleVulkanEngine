@@ -34,6 +34,7 @@ find_path(tinygltf_INCLUDE_DIR
     /usr/local/include
     $ENV{VULKAN_SDK}/include
     ${ANDROID_NDK}/sources/third_party
+	${CMAKE_CURRENT_SOURCE_DIR}/vendor/tinygltf
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../external
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../third_party
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../attachments/external
